@@ -6,22 +6,17 @@ WORKDIR /
 RUN apt-get update && apt-get install -y git git-lfs
 
 # Download generative-models repo
-RUN git clone github.com:Stability-AI/generative-models.git
+RUN git clone https://github.com/Stability-AI/generative-models.git
 
 # Download checkpoint
 RUN git lfs install
-RUN git clone https://huggingface.co/stabilityai/stable-video-diffusion-img2vid
-RUN mv stable-video-diffusion-img2vid checkpoints
+RUN git clone https://huggingface.co/stabilityai/stable-video-diffusion-img2vid checkpoints
 
 # Install python packages.
 RUN pip3 install --upgrade pip
-ADD requirements.txt requirements.txt
-RUN pip3 install -r requirements.txt
-
-# Add your model weight files 
-# (in this case we have a python script)
-ADD download.py .
-RUN python3 download.py
+RUN pip3 install -r generative-models/requirements/pt2.txt
+RUN pip3 install generative-models
+RUN pip3 install potassium
 
 ADD . .
 
