@@ -18,6 +18,7 @@ from sgm.util import default, instantiate_from_config
 from omegaconf import OmegaConf
 import base64
 import io
+import requests
 
 app = Potassium("stable-video-diffusion")
 
@@ -59,7 +60,6 @@ def init():
 
 def get_unique_embedder_keys_from_conditioner(conditioner):
     return list(set([x.input_key for x in conditioner.embedders]))
-
 
 
 def get_batch(keys, value_dict, N, T, device):
@@ -124,20 +124,28 @@ def handler(context: dict, request: Request) -> Response:
     # -------------------------
     # User Params
 
+    # Tweak to prevent OOM
+    decoding_t = request.json.get("decoding_t", 1)
+    max_dimension = request.json.get("max_dimension", 1024)
+
+    # For random seeding
     seed = request.json.get("seed")
     if seed != None:
         torch.manual_seed(seed)
 
-    decoding_t = request.json.get("decoding_t", 1)
-
+    # Image passed in via json
     if request.json.get("image_bytes") != None:
-        image_bytes = base64.b64decode(context.get("image_bytes"))
+        image_bytes = base64.b64decode(request.json.get("image_bytes"))
         image = Image.open(io.BytesIO(image_bytes))
+    
+    # Image passed in via url
     elif request.json.get("image_url") != None:
-        # todo
-        pass
+        response = requests.get(request.json.get("image_url"))
+        response.raise_for_status()
+        image = Image.open(io.BytesIO(response.content))
+    
+    # Default rocket img
     else:
-        # use test img
         print("Using default image 🚀")
         input_img_path = Path(default_input)
         image = Image.open(input_img_path)
@@ -148,6 +156,12 @@ def handler(context: dict, request: Request) -> Response:
     if image.mode == "RGBA":
         image = image.convert("RGB")
     w, h = image.size
+
+    # Shrink to max dimension to prevent OOM
+    scale = min(max_dimension / w, max_dimension / h)
+    w, h = int(w * scale), int(h * scale)
+    image = image.resize((w, h))
+    print(f"Resized image to {h}x{w}")
 
     if h % 64 != 0 or w % 64 != 0:
         width, height = map(lambda x: x - x % 64, (w, h))
